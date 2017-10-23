@@ -50,6 +50,9 @@ class StcGal:
         elif opts.protocol == "stc15":
             self.protocol = Stc15Protocol(opts.port, opts.handshake, opts.baud,
                                           round(opts.trim * 1000))
+        elif opts.protocol == "stc8":
+            self.protocol = Stc8Protocol(opts.port, opts.handshake, opts.baud,
+                                         round(opts.trim * 1000))
         elif opts.protocol == "usb15":
             self.protocol = StcUsb15Protocol()
         else:
@@ -205,7 +208,7 @@ def cli():
     parser.add_argument("eeprom_image", help="eeprom segment file to flash (BIN/HEX)", type=argparse.FileType("rb"), nargs='?')
     parser.add_argument("-a", "--autoreset", help="cycle power automatically by asserting DTR", action="store_true")
     parser.add_argument("-r", "--resetcmd",  help="Use this shell command for board power-cycling (instead of DTR assertion)", action="store")
-    parser.add_argument("-P", "--protocol", help="protocol version (default: auto)", choices=["stc89", "stc12a", "stc12b", "stc12", "stc15a", "stc15", "usb15", "auto"], default="auto")
+    parser.add_argument("-P", "--protocol", help="protocol version (default: auto)", choices=["stc89", "stc12a", "stc12b", "stc12", "stc15a", "stc15", "stc8", "usb15", "auto"], default="auto")
     parser.add_argument("-p", "--port", help="serial port device", default="/dev/ttyUSB0")
     parser.add_argument("-b", "--baud", help="transfer baud rate (default: 19200)", type=BaudType(), default=19200)
     parser.add_argument("-l", "--handshake", help="handshake baud rate (default: 2400)", type=BaudType(), default=2400)
