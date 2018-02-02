@@ -81,11 +81,11 @@ class IHex:
             for addr, data in self.areas.items():
                 if addr >= start:
                     if len(result) < (addr - start):
-                        result[len(result):addr - start] = bytes(
+                        result[len(result):addr - start] = bytearray(
                             addr - start - len(result))
                     result[addr - start:addr - start + len(data)] = data
 
-            return bytes(result)
+            return bytearray(result)
 
         else:
             result = bytearray()
@@ -94,11 +94,11 @@ class IHex:
                 if addr >= start and addr < end:
                     data = data[:end - addr]
                     if len(result) < (addr - start):
-                        result[len(result):addr - start] = bytes(
+                        result[len(result):addr - start] = bytearray(
                             addr - start - len(result))
                     result[addr - start:addr - start + len(data)] = data
 
-            return bytes(result)
+            return bytearray(result)
 
     def set_start(self, start=None):
         self.start = start
@@ -128,7 +128,7 @@ class IHex:
                 :istart - area] + idata + data[iend - area:]
 
     def calc_checksum(self, data):
-        total = sum(data)
+        total = sum(ord(x) for x in data)
         return (-total) & 0xFF
 
     def parse_line(self, rawline):
@@ -145,10 +145,12 @@ class IHex:
         dataend = length + 4
         data = line[4:dataend]
 
-        cs1 = line[dataend]
+        cs1 = ord(line[dataend])
         cs2 = self.calc_checksum(line[:dataend])
 
         if cs1 != cs2:
+            print (cs1)
+            print (cs2)
             raise ValueError("Checksums do not match")
 
         return (line_type, addr, data)

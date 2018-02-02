@@ -20,12 +20,15 @@
 # SOFTWARE.
 #
 
+from __future__ import print_function
+
 import sys
 import argparse
 import stcgal
 from stcgal.utils import BaudType
 from stcgal.protocols import *
 from stcgal.ihex import IHex
+
 
 class StcGal:
     """STC ISP flash tool frontend"""
@@ -112,7 +115,7 @@ class StcGal:
                 print("WARNING: eeprom_image truncated!", file=sys.stderr)
                 eedata = eedata[0:ee_size]
             if len(bindata) < code_size:
-                bindata += bytes(code_size - len(bindata))
+                bindata += bytearray(code_size - len(bindata))
             elif len(bindata) > code_size:
                 print("WARNING: eeprom_image overlaps code_image!", file=sys.stderr)
                 bindata = bindata[0:code_size]

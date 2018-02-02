@@ -20,6 +20,8 @@
 # SOFTWARE.
 #
 
+from __future__ import print_function
+
 import serial
 import sys
 import os
@@ -32,9 +34,13 @@ import collections
 from stcgal.models import MCUModelDatabase
 from stcgal.utils import Utils
 from stcgal.options import Stc89Option, Stc12Option, Stc12AOption, Stc15Option, Stc15AOption
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import functools
 import tqdm
+import abc
+
+# compatible with Python 2 *and* 3:
+ABC = abc.ABCMeta('ABC', (object,), {'__slots__': ()}) 
 
 try:
     import usb.core, usb.util
@@ -57,16 +63,16 @@ class StcBaseProtocol(ABC):
     """Basic functionality for STC BSL protocols"""
 
     """magic word that starts a packet"""
-    PACKET_START = bytes([0x46, 0xb9])
+    PACKET_START = bytearray([0x46, 0xb9])
 
     """magic byte that ends a packet"""
-    PACKET_END = bytes([0x16])
+    PACKET_END = bytearray([0x16])
 
     """magic byte for packets received from MCU"""
-    PACKET_MCU = bytes([0x68])
+    PACKET_MCU = bytearray([0x68])
 
     """magic byte for packets sent by host"""
-    PACKET_HOST = bytes([0x6a])
+    PACKET_HOST = bytearray([0x6a])
 
     PARITY = serial.PARITY_NONE
 
@@ -114,7 +120,6 @@ class StcBaseProtocol(ABC):
         data = self.ser.read(num)
         if len(data) != num:
             raise serial.SerialTimeoutException("read timeout")
-
         return data
 
     def extract_payload(self, packet):
@@ -140,13 +145,15 @@ class StcBaseProtocol(ABC):
         """
 
         # read and check frame start magic
-        packet = bytes()
+        packet = bytearray()
         packet += self.read_bytes_safe(1)
         # Some (?) BSL versions don't send a frame start with the status
         # packet. Let's be liberal and accept that always, just in case.
+        
         if packet[0] == self.PACKET_MCU[0]:
             packet = self.PACKET_START + self.PACKET_MCU
         else:
+            print
             if packet[0] != self.PACKET_START[0]:
                 self.dump_packet(packet)
                 raise StcFramingException("incorrect frame start")
@@ -221,14 +228,13 @@ class StcBaseProtocol(ABC):
 
     def get_status_packet(self):
         """Read and decode status packet"""
-
         packet = self.read_packet()
         if packet[0] == 0x80:
             # need to re-ack
             self.ser.parity = serial.PARITY_EVEN
             packet = (self.PACKET_START
                       + self.PACKET_HOST
-                      + bytes([0x00, 0x07, 0x80, 0x00, 0xF1])
+                      + bytearray([0x00, 0x07, 0x80, 0x00, 0xF1])
                       + self.PACKET_END)
             self.dump_packet(packet, receive=False)
             self.ser.write(packet)
@@ -299,6 +305,7 @@ class StcBaseProtocol(ABC):
         while not self.status_packet:
             try:
                 self.pulse()
+                time.sleep(0.15)
                 self.status_packet = self.get_status_packet()
                 if len(self.status_packet) < 23:
                     raise StcProtocolException("status packet too short")
@@ -347,7 +354,7 @@ class StcBaseProtocol(ABC):
         """Disconnect from MCU"""
 
         # reset mcu
-        packet = bytes([0x82])
+        packet = bytearray([0x82])
         self.write_packet(packet)
         self.ser.close()
         print("Disconnected!")
@@ -419,7 +426,7 @@ class Stc89Protocol(StcBaseProtocol):
         """
 
         # frame start and direction magic
-        packet = bytes()
+        packet = bytearray()
         packet += self.PACKET_START
         packet += self.PACKET_HOST
 
@@ -428,7 +435,7 @@ class Stc89Protocol(StcBaseProtocol):
         packet += data
 
         # checksum and end code
-        packet += bytes([sum(packet[2:]) & 0xff])
+        packet += bytearray([sum(packet[2:]) & 0xff])
         packet += self.PACKET_END
 
         self.dump_packet(packet, receive=False)
@@ -438,6 +445,7 @@ class Stc89Protocol(StcBaseProtocol):
     def get_status_packet(self):
         """Read and decode status packet"""
 
+        print("get_status_packet")
         status_packet = self.read_packet()
         if status_packet[0] != 0x00:
             raise StcProtocolException("incorrect magic in status packet")
@@ -462,7 +470,7 @@ class Stc89Protocol(StcBaseProtocol):
         # timing is different in 6T mode
         sample_rate = 16 if self.cpu_6t else 32
         # baudrate is directly controlled by programming the MCU's BRT register
-        brt = 65536 - round((self.mcu_clock_hz) / (self.baud_transfer * sample_rate))
+        brt = int(65536 - round((self.mcu_clock_hz) / (self.baud_transfer * sample_rate)))
         brt_csum = (2 * (256 - brt)) & 0xff
         baud_actual = (self.mcu_clock_hz) / (sample_rate * (65536 - brt))
         baud_error = (abs(self.baud_transfer - baud_actual) * 100.0) / self.baud_transfer
@@ -509,9 +517,9 @@ class Stc89Protocol(StcBaseProtocol):
         brt, brt_csum, iap, delay = self.calculate_baud()
         print("checking ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8f])
+        packet = bytearray([0x8f])
         packet += struct.pack(">H", brt)
-        packet += bytes([0xff - (brt >> 8), brt_csum, delay, iap])
+        packet += bytearray([0xff - (brt >> 8), brt_csum, delay, iap])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -523,9 +531,9 @@ class Stc89Protocol(StcBaseProtocol):
         # switch to baudrate
         print("setting ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8e])
+        packet = bytearray([0x8e])
         packet += struct.pack(">H", brt)
-        packet += bytes([0xff - (brt >> 8), brt_csum, delay])
+        packet += bytearray([0xff - (brt >> 8), brt_csum, delay])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -536,7 +544,7 @@ class Stc89Protocol(StcBaseProtocol):
         # ping-pong test
         print("testing ", end="")
         sys.stdout.flush()
-        packet = bytes([0x80, 0x00, 0x00, 0x36, 0x01])
+        packet = bytearray([0x80, 0x00, 0x00, 0x36, 0x01])
         packet += struct.pack(">H", self.mcu_magic)
         for i in range(4):
             self.write_packet(packet)
@@ -556,7 +564,7 @@ class Stc89Protocol(StcBaseProtocol):
         blks = ((erase_size + 511) // 512) * 2
         print("Erasing %d blocks: " % blks, end="")
         sys.stdout.flush()
-        packet = bytes([0x84, blks, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33])
+        packet = bytearray([0x84, blks, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33])
         self.write_packet(packet)
         response = self.read_packet()
         if response[0] != 0x80:
@@ -571,7 +579,7 @@ class Stc89Protocol(StcBaseProtocol):
         """
 
         for i in range(0, len(data), self.PROGRAM_BLOCKSIZE):
-            packet = bytes(3)
+            packet = bytearray(3)
             packet += struct.pack(">H", i)
             packet += struct.pack(">H", self.PROGRAM_BLOCKSIZE)
             packet += data[i:i+self.PROGRAM_BLOCKSIZE]
@@ -592,7 +600,7 @@ class Stc89Protocol(StcBaseProtocol):
         print("Setting options: ", end="")
         sys.stdout.flush()
         msr = self.options.get_msr()
-        packet = bytes([0x8d, msr, 0xff, 0xff, 0xff])
+        packet = bytearray([0x8d, msr, 0xff, 0xff, 0xff])
         self.write_packet(packet)
         response = self.read_packet()
         if response[0] != 0x8d:
@@ -605,13 +613,13 @@ class Stc12AOptionsMixIn:
         print("Setting options: ", end="")
         sys.stdout.flush()
         msr = self.options.get_msr()
-        packet = bytes([0x8d, msr[0], msr[1], msr[2], 0xff, msr[3]])
+        packet = bytearray([0x8d, msr[0], msr[1], msr[2], 0xff, msr[3]])
         packet += struct.pack(">I", int(self.mcu_clock_hz))
-        packet += bytes([msr[3]])
-        packet += bytes([0xff, msr[0], msr[1], 0xff, 0xff, 0xff, 0xff, msr[2]])
-        packet += bytes([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
+        packet += bytearray([msr[3]])
+        packet += bytearray([0xff, msr[0], msr[1], 0xff, 0xff, 0xff, 0xff, msr[2]])
+        packet += bytearray([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
         packet += struct.pack(">I", int(self.mcu_clock_hz))
-        packet += bytes([0xff, 0xff, 0xff])
+        packet += bytearray([0xff, 0xff, 0xff])
 
         self.write_packet(packet)
         response = self.read_packet()
@@ -621,7 +629,7 @@ class Stc12AOptionsMixIn:
         # XXX: this is done by STC-ISP on newer parts. not sure why, but let's
         # just replicate it, just to be sure.
         if self.bsl_version >= 0x66:
-            packet = bytes([0x50])
+            packet = bytearray([0x50])
             self.write_packet(packet)
             response = self.read_packet()
             if response[0] != 0x10:
@@ -701,7 +709,7 @@ class Stc12AProtocol(Stc12AOptionsMixIn, Stc89Protocol):
         brt, brt_csum, iap, delay = self.calculate_baud()
         print("checking ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8f, 0xc0, brt, 0x3f, brt_csum, delay, iap])
+        packet = bytearray([0x8f, 0xc0, brt, 0x3f, brt_csum, delay, iap])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -713,7 +721,7 @@ class Stc12AProtocol(Stc12AOptionsMixIn, Stc89Protocol):
         # switch to the settings
         print("setting ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8e, 0xc0, brt, 0x3f, brt_csum, delay])
+        packet = bytearray([0x8e, 0xc0, brt, 0x3f, brt_csum, delay])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -724,7 +732,7 @@ class Stc12AProtocol(Stc12AOptionsMixIn, Stc89Protocol):
         # ping-pong test
         print("testing ", end="")
         sys.stdout.flush()
-        packet = bytes([0x80, 0x00, 0x00, 0x36, 0x01])
+        packet = bytearray([0x80, 0x00, 0x00, 0x36, 0x01])
         packet += struct.pack(">H", self.mcu_magic)
         for i in range(4):
             self.write_packet(packet)
@@ -744,10 +752,10 @@ class Stc12AProtocol(Stc12AOptionsMixIn, Stc89Protocol):
         size = ((flash_size + 511) // 512) * 2
         print("Erasing %d blocks: " % blks, end="")
         sys.stdout.flush()
-        packet = bytes([0x84, 0xff, 0x00, blks, 0x00, 0x00, size,
+        packet = bytearray([0x84, 0xff, 0x00, blks, 0x00, 0x00, size,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                         0x00, 0x00, 0x00, 0x00, 0x00])
-        for i in range(0x80, self.ERASE_COUNTDOWN, -1): packet += bytes([i])
+        for i in range(0x80, self.ERASE_COUNTDOWN, -1): packet += bytearray([i])
         self.write_packet(packet)
         response = self.read_packet()
         if response[0] != 0x80:
@@ -762,7 +770,7 @@ class Stc12OptionsMixIn:
         msr = self.options.get_msr()
         # XXX: it's not 100% clear if the index of msr[3] is consistent
         # between devices, so write it to both indices.
-        packet = bytes([0x8d, msr[0], msr[1], msr[2], msr[3],
+        packet = bytearray([0x8d, msr[0], msr[1], msr[2], msr[3],
                         0xff, 0xff, 0xff, 0xff, msr[3], 0xff,
                         0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
 
@@ -814,7 +822,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
         """
 
         # frame start and direction magic
-        packet = bytes()
+        packet = bytearray()
         packet += self.PACKET_START
         packet += self.PACKET_HOST
 
@@ -891,7 +899,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
         brt, brt_csum, iap, delay = self.calculate_baud()
         print("Switching to %d baud: " % self.baud_transfer, end="")
         sys.stdout.flush()
-        packet = bytes([0x50, 0x00, 0x00, 0x36, 0x01])
+        packet = bytearray([0x50, 0x00, 0x00, 0x36, 0x01])
         packet += struct.pack(">H", self.mcu_magic)
         self.write_packet(packet)
         response = self.read_packet()
@@ -901,7 +909,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
         # test new settings
         print("testing ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8f, 0xc0, brt, 0x3f, brt_csum, delay, iap])
+        packet = bytearray([0x8f, 0xc0, brt, 0x3f, brt_csum, delay, iap])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -913,7 +921,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
         # switch to the settings
         print("setting ", end="")
         sys.stdout.flush()
-        packet = bytes([0x8e, 0xc0, brt, 0x3f, brt_csum, delay])
+        packet = bytearray([0x8e, 0xc0, brt, 0x3f, brt_csum, delay])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -933,10 +941,10 @@ class Stc12BaseProtocol(StcBaseProtocol):
         size = ((flash_size + 511) // 512) * 2
         print("Erasing %d blocks: " % blks, end="")
         sys.stdout.flush()
-        packet = bytes([0x84, 0xff, 0x00, blks, 0x00, 0x00, size,
+        packet = bytearray([0x84, 0xff, 0x00, blks, 0x00, 0x00, size,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                         0x00, 0x00, 0x00, 0x00, 0x00])
-        for i in range(0x80, self.ERASE_COUNTDOWN, -1): packet += bytes([i])
+        for i in range(0x80, self.ERASE_COUNTDOWN, -1): packet += bytearray([i])
         self.write_packet(packet)
         response = self.read_packet()
         if response[0] != 0x00:
@@ -955,7 +963,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
         """
 
         for i in range(0, len(data), self.PROGRAM_BLOCKSIZE):
-            packet = bytes(3)
+            packet = bytearray(3)
             packet += struct.pack(">H", i)
             packet += struct.pack(">H", self.PROGRAM_BLOCKSIZE)
             packet += data[i:i+self.PROGRAM_BLOCKSIZE]
@@ -969,7 +977,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
 
         print("Finishing write: ", end="")
         sys.stdout.flush()
-        packet = bytes([0x69, 0x00, 0x00, 0x36, 0x01])
+        packet = bytearray([0x69, 0x00, 0x00, 0x36, 0x01])
         packet += struct.pack(">H", self.mcu_magic)
         self.write_packet(packet)
         response = self.read_packet()
@@ -1021,7 +1029,7 @@ class Stc15AProtocol(Stc12Protocol):
         status_packet = self.read_packet()
         if status_packet[0] == 0x80:
             # need to re-ack
-            packet = bytes([0x80])
+            packet = bytearray([0x80])
             self.write_packet(packet)
             self.pulse()
             status_packet = self.read_packet()
@@ -1048,37 +1056,37 @@ class Stc15AProtocol(Stc12Protocol):
     def get_trim_sequence(self, frequency):
         """Return frequency-specific coarse trim sequence"""
 
-        packet = bytes()
+        packet = bytearray()
         if frequency < 7.5E6:
-            packet += bytes([0x18, 0x00, 0x02, 0x00])
-            packet += bytes([0x18, 0x80, 0x02, 0x00])
-            packet += bytes([0x18, 0x80, 0x02, 0x00])
-            packet += bytes([0x18, 0xff, 0x02, 0x00])
+            packet += bytearray([0x18, 0x00, 0x02, 0x00])
+            packet += bytearray([0x18, 0x80, 0x02, 0x00])
+            packet += bytearray([0x18, 0x80, 0x02, 0x00])
+            packet += bytearray([0x18, 0xff, 0x02, 0x00])
         elif frequency < 10E6:
-            packet += bytes([0x18, 0x80, 0x02, 0x00])
-            packet += bytes([0x18, 0xff, 0x02, 0x00])
-            packet += bytes([0x58, 0x00, 0x02, 0x00])
-            packet += bytes([0x58, 0xff, 0x02, 0x00])
+            packet += bytearray([0x18, 0x80, 0x02, 0x00])
+            packet += bytearray([0x18, 0xff, 0x02, 0x00])
+            packet += bytearray([0x58, 0x00, 0x02, 0x00])
+            packet += bytearray([0x58, 0xff, 0x02, 0x00])
         elif frequency < 15E6:
-            packet += bytes([0x58, 0x00, 0x02, 0x00])
-            packet += bytes([0x58, 0x80, 0x02, 0x00])
-            packet += bytes([0x58, 0x80, 0x02, 0x00])
-            packet += bytes([0x58, 0xff, 0x02, 0x00])
+            packet += bytearray([0x58, 0x00, 0x02, 0x00])
+            packet += bytearray([0x58, 0x80, 0x02, 0x00])
+            packet += bytearray([0x58, 0x80, 0x02, 0x00])
+            packet += bytearray([0x58, 0xff, 0x02, 0x00])
         elif frequency < 21E6:
-            packet += bytes([0x58, 0x80, 0x02, 0x00])
-            packet += bytes([0x58, 0xff, 0x02, 0x00])
-            packet += bytes([0x98, 0x00, 0x02, 0x00])
-            packet += bytes([0x98, 0x80, 0x02, 0x00])
+            packet += bytearray([0x58, 0x80, 0x02, 0x00])
+            packet += bytearray([0x58, 0xff, 0x02, 0x00])
+            packet += bytearray([0x98, 0x00, 0x02, 0x00])
+            packet += bytearray([0x98, 0x80, 0x02, 0x00])
         elif frequency < 31E6:
-            packet += bytes([0x98, 0x00, 0x02, 0x00])
-            packet += bytes([0x98, 0x80, 0x02, 0x00])
-            packet += bytes([0x98, 0x80, 0x02, 0x00])
-            packet += bytes([0x98, 0xff, 0x02, 0x00])
+            packet += bytearray([0x98, 0x00, 0x02, 0x00])
+            packet += bytearray([0x98, 0x80, 0x02, 0x00])
+            packet += bytearray([0x98, 0x80, 0x02, 0x00])
+            packet += bytearray([0x98, 0xff, 0x02, 0x00])
         else:
-            packet += bytes([0xd8, 0x00, 0x02, 0x00])
-            packet += bytes([0xd8, 0x80, 0x02, 0x00])
-            packet += bytes([0xd8, 0x80, 0x02, 0x00])
-            packet += bytes([0xd8, 0xb4, 0x02, 0x00])
+            packet += bytearray([0xd8, 0x00, 0x02, 0x00])
+            packet += bytearray([0xd8, 0x80, 0x02, 0x00])
+            packet += bytearray([0xd8, 0x80, 0x02, 0x00])
+            packet += bytearray([0xd8, 0xb4, 0x02, 0x00])
 
         return packet
 
@@ -1104,7 +1112,7 @@ class Stc15AProtocol(Stc12Protocol):
         # Initiate handshake
         print("Trimming frequency: ", end="")
         sys.stdout.flush()
-        packet = bytes([0x50, 0x00, 0x00, 0x36, 0x01])
+        packet = bytearray([0x50, 0x00, 0x00, 0x36, 0x01])
         packet += struct.pack(">H", self.mcu_magic)
         self.write_packet(packet)
         response = self.read_packet()
@@ -1112,14 +1120,14 @@ class Stc15AProtocol(Stc12Protocol):
             raise StcProtocolException("incorrect magic in handshake packet")
 
         # trim challenge-response, first round
-        packet = bytes([0x65])
+        packet = bytearray([0x65])
         packet += self.trim_data
-        packet += bytes([0xff, 0xff, 0x06, 0x06])
+        packet += bytearray([0xff, 0xff, 0x06, 0x06])
         # add trim challenges for target frequency
         packet += self.get_trim_sequence(user_speed)
         # add trim challenge for program frequency
-        packet += bytes([0x98, 0x00, 0x02, 0x00])
-        packet += bytes([0x98, 0x80, 0x02, 0x00])
+        packet += bytearray([0x98, 0x00, 0x02, 0x00])
+        packet += bytearray([0x98, 0x80, 0x02, 0x00])
         self.write_packet(packet)
         self.pulse(timeout=1.0)
         response = self.read_packet()
@@ -1164,12 +1172,12 @@ class Stc15AProtocol(Stc12Protocol):
             raise StcProtocolException("frequency trimming failed")
 
         # trim challenge-response, second round
-        packet = bytes([0x65])
+        packet = bytearray([0x65])
         packet += self.trim_data
-        packet += bytes([0xff, 0xff, 0x06, 0x0B])
+        packet += bytearray([0xff, 0xff, 0x06, 0x0B])
         for i in range(11):
             packet += struct.pack(">H", target_trim_start + i)
-            packet += bytes([0x02, 0x00])
+            packet += bytearray([0x02, 0x00])
         self.write_packet(packet)
         self.pulse(timeout=1.0)
         response = self.read_packet()
@@ -1192,10 +1200,10 @@ class Stc15AProtocol(Stc12Protocol):
         print("Switching to %d baud: " % self.baud_transfer, end="")
         sys.stdout.flush()
         iap_wait = self.get_iap_delay(program_speed)
-        packet = bytes([0x8e])
+        packet = bytearray([0x8e])
         packet += struct.pack(">H", program_trim)
         packet += struct.pack(">B", 230400 // self.baud_transfer)
-        packet += bytes([0xa1, 0x64, 0xb8, 0x00, iap_wait, 0x20, 0xff, 0x00])
+        packet += bytearray([0xa1, 0x64, 0xb8, 0x00, iap_wait, 0x20, 0xff, 0x00])
         self.write_packet(packet)
         time.sleep(0.2)
         self.ser.baudrate = self.baud_transfer
@@ -1208,9 +1216,9 @@ class Stc15AProtocol(Stc12Protocol):
         print("Setting options: ", end="")
         sys.stdout.flush()
         msr = self.options.get_msr()
-        packet = bytes([0x8d])
+        packet = bytearray([0x8d])
         packet += msr
-        packet += bytes([0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
+        packet += bytearray([0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
 
         self.write_packet(packet)
         response = self.read_packet()
@@ -1340,12 +1348,12 @@ class Stc15Protocol(Stc15AProtocol):
         # calibration, round 1
         print("Trimming frequency: ", end="")
         sys.stdout.flush()
-        packet = bytes([0x00])
+        packet = bytearray([0x00])
         packet += struct.pack(">B", 12)
-        packet += bytes([0x00, 0xc0, 0x80, 0xc0, 0xff, 0xc0])
-        packet += bytes([0x00, 0x80, 0x80, 0x80, 0xff, 0x80])
-        packet += bytes([0x00, 0x40, 0x80, 0x40, 0xff, 0x40])
-        packet += bytes([0x00, 0x00, 0x80, 0x00, 0xc0, 0x00])
+        packet += bytearray([0x00, 0xc0, 0x80, 0xc0, 0xff, 0xc0])
+        packet += bytearray([0x00, 0x80, 0x80, 0x80, 0xff, 0x80])
+        packet += bytearray([0x00, 0x40, 0x80, 0x40, 0xff, 0x40])
+        packet += bytearray([0x00, 0x00, 0x80, 0x00, 0xc0, 0x00])
         self.write_packet(packet)
         self.pulse(b"\xfe", timeout=1.0)
         response = self.read_packet()
@@ -1359,12 +1367,12 @@ class Stc15Protocol(Stc15AProtocol):
             raise StcProtocolException("frequency trimming unsuccessful")
 
         # calibration, round 2
-        packet = bytes([0x00])
+        packet = bytearray([0x00])
         packet += struct.pack(">B", 12)
         for i in range(user_trim[0] - 3, user_trim[0] + 3):
-            packet += bytes([i & 0xff, user_trim[1]])
+            packet += bytearray([i & 0xff, user_trim[1]])
         for i in range(prog_trim[0] - 3, prog_trim[0] + 3):
-            packet += bytes([i & 0xff, prog_trim[1]])
+            packet += bytearray([i & 0xff, prog_trim[1]])
         self.write_packet(packet)
         self.pulse(b"\xfe", timeout=1.0)
         response = self.read_packet()
@@ -1381,17 +1389,17 @@ class Stc15Protocol(Stc15AProtocol):
         # switch to programming frequency
         print("Switching to %d baud: " % self.baud_transfer, end="")
         sys.stdout.flush()
-        packet = bytes([0x01])
-        packet += bytes(prog_trim)
+        packet = bytearray([0x01])
+        packet += bytearray(prog_trim)
         # XXX: baud rate calculation is different between MCUs with and without
         # hardware UART. Only one family of models seems to lack a hardware
         # UART, and we can isolate those with a check on the magic.
         # This is a bit of a hack, but it works.
         bauds = self.baud_transfer if (self.mcu_magic >> 8) == 0xf2 else self.baud_transfer * 4
         packet += struct.pack(">H", int(65535 - program_speed / bauds))
-        packet += bytes(user_trim)
+        packet += bytearray(user_trim)
         iap_wait = self.get_iap_delay(program_speed)
-        packet += bytes([iap_wait])
+        packet += bytearray([iap_wait])
         self.write_packet(packet)
         response = self.read_packet()
         if len(response) < 1 or response[0] != 0x01:
@@ -1404,11 +1412,11 @@ class Stc15Protocol(Stc15AProtocol):
 
         print("Switching to %d baud: " % self.baud_transfer, end="")
         sys.stdout.flush()
-        packet = bytes([0x01])
-        packet += bytes([self.freq_count_24, 0x40])
+        packet = bytearray([0x01])
+        packet += bytearray([self.freq_count_24, 0x40])
         packet += struct.pack(">H", int(65535 - self.mcu_clock_hz / self.baud_transfer / 4))
         iap_wait = self.get_iap_delay(self.mcu_clock_hz)
-        packet += bytes([0x00, 0x00, iap_wait])
+        packet += bytearray([0x00, 0x00, iap_wait])
         self.write_packet(packet)
         response = self.read_packet()
         if len(response) < 1 or response[0] != 0x01:
@@ -1432,9 +1440,9 @@ class Stc15Protocol(Stc15AProtocol):
             self.calibrate()
 
         # test/prepare
-        packet = bytes([0x05])
+        packet = bytearray([0x05])
         if self.bsl_version >= 0x72:
-            packet += bytes([0x00, 0x00, 0x5a, 0xa5])
+            packet += bytearray([0x00, 0x00, 0x5a, 0xa5])
         self.write_packet(packet)
         response = self.read_packet()
         if len(response) == 1 and response[0] == 0x0f:
@@ -1455,9 +1463,9 @@ class Stc15Protocol(Stc15AProtocol):
 
         print("Erasing flash: ", end="")
         sys.stdout.flush()
-        packet = bytes([0x03, 0x00])
+        packet = bytearray([0x03, 0x00])
         if self.bsl_version >= 0x72:
-            packet += bytes([0x00, 0x5a, 0xa5])
+            packet += bytearray([0x00, 0x5a, 0xa5])
         self.write_packet(packet)
         response = self.read_packet()
         if len(response) < 1 or response[0] != 0x03:
@@ -1475,10 +1483,10 @@ class Stc15Protocol(Stc15AProtocol):
         """Program the MCU's flash memory."""
 
         for i in range(0, len(data), self.PROGRAM_BLOCKSIZE):
-            packet = bytes([0x22]) if i == 0 else bytes([0x02])
+            packet = bytearray([0x22]) if i == 0 else bytearray([0x02])
             packet += struct.pack(">H", i)
             if self.bsl_version >= 0x72:
-                packet += bytes([0x5a, 0xa5])
+                packet += bytearray([0x5a, 0xa5])
             packet += data[i:i+self.PROGRAM_BLOCKSIZE]
             while len(packet) < self.PROGRAM_BLOCKSIZE + 3: packet += b"\x00"
             self.write_packet(packet)
@@ -1492,7 +1500,7 @@ class Stc15Protocol(Stc15AProtocol):
         if self.bsl_version >= 0x72:
             print("Finishing write: ", end="")
             sys.stdout.flush()
-            packet = bytes([0x07, 0x00, 0x00, 0x5a, 0xa5])
+            packet = bytearray([0x07, 0x00, 0x00, 0x5a, 0xa5])
             self.write_packet(packet)
             response = self.read_packet()
             if len(response) < 2 or response[0] != 0x07 or response[1] != 0x54:
@@ -1504,8 +1512,8 @@ class Stc15Protocol(Stc15AProtocol):
         configuration."""
 
         msr = self.options.get_msr()
-        packet = bytes([0xff] * 23)
-        packet += bytes([(self.trim_frequency >> 24) & 0xff,
+        packet = bytearray([0xff] * 23)
+        packet += bytearray([(self.trim_frequency >> 24) & 0xff,
                          0xff,
                          (self.trim_frequency >> 16) & 0xff,
                          0xff,
@@ -1513,14 +1521,14 @@ class Stc15Protocol(Stc15AProtocol):
                          0xff,
                          (self.trim_frequency >> 0) & 0xff,
                          0xff])
-        packet += bytes([msr[3]])
-        packet += bytes([0xff] * 23)
+        packet += bytearray([msr[3]])
+        packet += bytearray([0xff] * 23)
         if len(msr) > 4:
-            packet += bytes([msr[4]])
+            packet += bytearray([msr[4]])
         else:
-            packet += bytes([0xff])
-        packet += bytes([0xff] * 3)
-        packet += bytes([self.trim_value[0], self.trim_value[1] + 0x3f])
+            packet += bytearray([0xff])
+        packet += bytearray([0xff] * 3)
+        packet += bytearray([self.trim_value[0], self.trim_value[1] + 0x3f])
         packet += msr[0:3]
         return packet
 
@@ -1528,9 +1536,9 @@ class Stc15Protocol(Stc15AProtocol):
         print("Setting options: ", end="")
         sys.stdout.flush()
 
-        packet = bytes([0x04, 0x00, 0x00])
+        packet = bytearray([0x04, 0x00, 0x00])
         if self.bsl_version >= 0x72:
-            packet += bytes([0x5a, 0xa5])
+            packet += bytearray([0x5a, 0xa5])
         packet += self.build_options()
         self.write_packet(packet)
         response = self.read_packet()
@@ -1585,17 +1593,17 @@ class StcUsb15Protocol(Stc15Protocol):
         self.dump_packet(packet, receive=True)
         return packet[3:3+data_len]
 
-    def write_packet(self, request, value=0, index=0, data=bytes([0])):
+    def write_packet(self, request, value=0, index=0, data=bytearray([0])):
         """Write USB control packet"""
 
         # Control transfers are maximum of 8 bytes each, and every
         # invidual partial transfer is checksummed individually.
         i = 0
-        chunks = bytes()
+        chunks = bytearray()
         while i < len(data):
             c = data[i:i+7]
             csum = functools.reduce(lambda x, y: x - y, c, 0) & 0xff
-            chunks += c + bytes([csum])
+            chunks += c + bytearray([csum])
             i += 7
 
         self.dump_packet(chunks, request, value, index, receive=False)
@@ -1639,7 +1647,7 @@ class StcUsb15Protocol(Stc15Protocol):
         sys.stdout.flush()
 
         # handshake
-        self.write_packet(0x01, 0, 0, bytes([0x03]))
+        self.write_packet(0x01, 0, 0, bytearray([0x03]))
         response = self.read_packet()
         if response[0] != 0x01:
             raise StcProtocolException("incorrect magic in handshake packet")

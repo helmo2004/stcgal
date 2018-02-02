@@ -50,8 +50,7 @@ class Utils:
     @classmethod
     def hexstr(cls, bytestr, sep=""):
         """make formatted hex string output from byte sequence"""
-
-        return sep.join(["%02X" % x for x in bytes(bytestr)])
+        return sep.join(["%02X" % x for x in bytearray(bytestr)])
 
 
 class BaudType:
@@ -59,8 +58,8 @@ class BaudType:
 
     def __call__(self, string):
         baud = int(string)
-        if baud not in serial.Serial.BAUDRATES:
-            raise argparse.ArgumentTypeError("illegal baudrate")
+        #if baud not in serial.Serial.BAUDRATES:
+        #    raise argparse.ArgumentTypeError("illegal baudrate")
         return baud
 
     def __repr__(self):

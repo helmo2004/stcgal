@@ -20,9 +20,14 @@
 # SOFTWARE.
 #
 
+from __future__ import print_function
+
 import struct
-from abc import ABC
+import abc
 from stcgal.utils import Utils
+
+# compatible with Python 2 *and* 3:
+ABC = abc.ABCMeta('ABC', (object,), {'__slots__': ()}) 
 
 class BaseOption(ABC):
     """Base class for options"""
@@ -55,14 +60,14 @@ class BaseOption(ABC):
 
     def get_msr(self):
         """Get array of model-specific configuration registers"""
-        return bytes(self.msr)
+        return bytearray(self.msr)
 
 
 class Stc89Option(BaseOption):
     """Manipulation STC89 series option byte"""
 
     def __init__(self, msr):
-        super().__init__()
+        super(Stc89Option, self).__init__()
         self.msr = msr
         self.options = (
             ("cpu_6t_enabled", self.get_t6, self.set_t6),
