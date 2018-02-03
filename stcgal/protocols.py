@@ -445,7 +445,6 @@ class Stc89Protocol(StcBaseProtocol):
     def get_status_packet(self):
         """Read and decode status packet"""
 
-        print("get_status_packet")
         status_packet = self.read_packet()
         if status_packet[0] != 0x00:
             raise StcProtocolException("incorrect magic in status packet")
