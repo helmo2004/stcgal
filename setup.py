@@ -28,7 +28,7 @@ setup(
     name = "stcgal",
     version = stcgal.__version__,
     packages = find_packages(exclude=["doc", "tests"]),
-    install_requires = ["pyserial"],
+    install_requires = ["pyserial", "six"],
     extras_require = {
         "usb": ["pyusb>=1.0.0"]
     },

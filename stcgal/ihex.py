@@ -4,7 +4,7 @@
 
 import struct
 import codecs
-
+import six
 
 class IHex:
     """Intel HEX parser and writer"""
@@ -128,7 +128,10 @@ class IHex:
                 :istart - area] + idata + data[iend - area:]
 
     def calc_checksum(self, data):
-        total = sum(ord(x) for x in data)
+        if six.PY2:
+            total = sum(ord(x) for x in data)
+        else:
+            total = sum(x for x in data)
         return (-total) & 0xFF
 
     def parse_line(self, rawline):
@@ -143,9 +146,12 @@ class IHex:
         length, addr, line_type = struct.unpack(">BHB", line[:4])
 
         dataend = length + 4
-        data = line[4:dataend]
+        data = bytearray(line[4:dataend])
 
-        cs1 = ord(line[dataend])
+        if six.PY2:
+            cs1 = ord(line[dataend])
+        else:
+            cs1 = line[dataend]
         cs2 = self.calc_checksum(line[:dataend])
 
         if cs1 != cs2:

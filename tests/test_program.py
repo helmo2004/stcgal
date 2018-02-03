@@ -23,18 +23,23 @@
 """Tests that simulate a whole programming cycle"""
 
 import unittest
-from unittest.mock import patch
+try:
+	from unittest.mock import patch
+	from unittest import mock
+except:
+	from mock.mock import patch
+	from mock import mock
 import yaml
 import stcgal.frontend
 import stcgal.protocols
 
 def convert_to_bytes(list_of_lists):
     """Convert lists of integer lists to list of byte lists"""
-    return [bytes(x) for x in list_of_lists]
+    return [bytearray(x) for x in list_of_lists]
 
 def get_default_opts():
     """Get a default preconfigured option object"""
-    opts = unittest.mock.MagicMock()
+    opts = mock.MagicMock()
     opts.protocol = "stc89"
     opts.autoreset = False
     opts.port = ""
@@ -128,7 +133,7 @@ class ProgramTests(unittest.TestCase):
             test_data = yaml.load(test_file.read())
             opts = get_default_opts()
             opts.protocol = test_data["protocol"]
-            opts.code_image.read.return_value = bytes(test_data["code_data"])
+            opts.code_image.read.return_value = bytearray(test_data["code_data"])
             serial_mock.return_value.inWaiting.return_value = 1
             read_mock.side_effect = convert_to_bytes(test_data["responses"])
             gal = stcgal.frontend.StcGal(opts)

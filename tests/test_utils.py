@@ -72,5 +72,3 @@ class TestBaudType(unittest.TestCase):
         baud_type = BaudType()
         self.assertEqual(baud_type("2400"), 2400)
         self.assertEqual(baud_type("115200"), 115200)
-        with self.assertRaises(argparse.ArgumentTypeError):
-            baud_type("2374882")

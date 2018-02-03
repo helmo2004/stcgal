@@ -146,7 +146,7 @@ class Stc12AOption(BaseOption):
     """Manipulate STC12A series option bytes"""
 
     def __init__(self, msr):
-        super().__init__()
+        super(Stc12AOption, self).__init__()
         assert len(msr) == 4
         self.msr = bytearray(msr)
 
@@ -231,7 +231,7 @@ class Stc12Option(BaseOption):
     """Manipulate STC10/11/12 series option bytes"""
 
     def __init__(self, msr):
-        super().__init__()
+        super(Stc12Option, self).__init__()
         assert len(msr) == 4
         self.msr = bytearray(msr)
 
@@ -356,7 +356,7 @@ class Stc12Option(BaseOption):
 
 class Stc15AOption(BaseOption):
     def __init__(self, msr):
-        super().__init__()
+        super(Stc15AOption, self).__init__()
         assert len(msr) == 13
         self.msr = bytearray(msr)
 
@@ -455,7 +455,7 @@ class Stc15AOption(BaseOption):
 
 class Stc15Option(BaseOption):
     def __init__(self, msr):
-        super().__init__()
+        super(Stc15Option, self).__init__()
         assert len(msr) >= 4
         self.msr = bytearray(msr)
 

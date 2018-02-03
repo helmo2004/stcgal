@@ -670,6 +670,7 @@ class Stc12AProtocol(Stc12AOptionsMixIn, Stc89Protocol):
 
         # baudrate is directly controlled by programming the MCU's BRT register
         brt = 256 - round((self.mcu_clock_hz) / (self.baud_transfer * 16))
+        brt = int(brt)
         if brt <= 1 or brt > 255:
             raise StcProtocolException("requested baudrate cannot be set")
         brt_csum = (2 * (256 - brt)) & 0xff
@@ -862,6 +863,7 @@ class Stc12BaseProtocol(StcBaseProtocol):
 
         # baudrate is directly controlled by programming the MCU's BRT register
         brt = 256 - round((self.mcu_clock_hz) / (self.baud_transfer * 16))
+        brt = int(brt)
         if brt <= 1 or brt > 255:
             raise StcProtocolException("requested baudrate cannot be set")
         brt_csum = (2 * (256 - brt)) & 0xff
@@ -1141,7 +1143,7 @@ class Stc15AProtocol(Stc12Protocol):
             raise StcProtocolException("frequency trimming failed")
         m = (target_trim_b - target_trim_a) / (target_count_b - target_count_a)
         n = target_trim_a - m * target_count_a
-        program_trim = round(m * program_count + n)
+        program_trim = int(round(m * program_count + n))
         if program_trim > 65535 or program_trim < 0:
             raise StcProtocolException("frequency trimming failed")
 
@@ -1166,7 +1168,7 @@ class Stc15AProtocol(Stc12Protocol):
             raise StcProtocolException("frequency trimming failed")
         m = (target_trim_b - target_trim_a) / (target_count_b - target_count_a)
         n = target_trim_a - m * target_count_a
-        target_trim = round(m * user_count + n)
+        target_trim = int(round(m * user_count + n))
         target_trim_start = min(max(target_trim - 5, target_trim_a), target_trim_b)
         if target_trim_start + 11 > 65535 or target_trim_start < 0:
             raise StcProtocolException("frequency trimming failed")
@@ -1299,7 +1301,7 @@ class Stc15Protocol(Stc15AProtocol):
                     (count_b <= target_count and count_a >= target_count)):
                 m = (trim_b - trim_a) / (count_b - count_a)
                 n = trim_a - m * count_a
-                target_trim = round(m * target_count + n)
+                target_trim = int(round(m * target_count + n))
                 if target_trim > 65536 or target_trim < 0:
                     raise StcProtocolException("frequency trimming failed")
                 return (target_trim, trim_range)
@@ -1342,8 +1344,8 @@ class Stc15Protocol(Stc15AProtocol):
         user_speed = self.trim_frequency
         if user_speed <= 0: user_speed = self.mcu_clock_hz
         program_speed = 22118400
-        target_user_count = round(user_speed / (self.baud_handshake/2))
-        target_prog_count = round(program_speed / (self.baud_handshake/2))
+        target_user_count = int(round(user_speed / (self.baud_handshake/2)))
+        target_prog_count = int(round(program_speed / (self.baud_handshake/2)))
 
         # calibration, round 1
         print("Trimming frequency: ", end="")
@@ -1383,7 +1385,7 @@ class Stc15Protocol(Stc15AProtocol):
         user_trim, user_count = self.choose_trim(packet, response, target_user_count)
         prog_trim, prog_count = self.choose_trim(packet, response, target_prog_count)
         self.trim_value = user_trim
-        self.trim_frequency = round(user_count * (self.baud_handshake / 2))
+        self.trim_frequency = int(round(user_count * (self.baud_handshake / 2)))
         print("%.03f MHz" % (self.trim_frequency / 1E6))
 
         # switch to programming frequency

@@ -25,7 +25,12 @@
 import random
 import sys
 import unittest
-from unittest.mock import patch
+try:
+	from unittest.mock import patch
+	from unittest import mock
+except:
+	from mock.mock import patch
+	from mock import mock
 import yaml
 import stcgal.frontend
 import stcgal.protocols
@@ -91,29 +96,27 @@ class TestProgramFuzzed(unittest.TestCase):
         fuzzer.bitflip_probability = 0.005
         fuzzer.rng = random.Random(1)
         for y in yml:
-            with self.subTest(msg="trace {}".format(y)):
-                self.single_fuzz(y, serial_mock, fuzzer, read_mock, err, out,
-                                 sleep_mock, write_mock)
+            self.single_fuzz(y, serial_mock, fuzzer, read_mock, err, out,
+                             sleep_mock, write_mock)
 
     def single_fuzz(self, yml, serial_mock, fuzzer, read_mock, err, out, sleep_mock, write_mock):
         """Test a single programming cycle with fuzzing"""
         with open(yml) as test_file:
             test_data = yaml.load(test_file.read())
             for _ in range(1000):
-                with self.subTest():
-                    opts = get_default_opts()
-                    opts.protocol = test_data["protocol"]
-                    opts.code_image.read.return_value = bytes(test_data["code_data"])
-                    serial_mock.return_value.inWaiting.return_value = 1
-                    fuzzed_responses = []
-                    for arr in convert_to_bytes(test_data["responses"]):
-                        fuzzed_responses.append(fuzzer.fuzz(arr))
-                    read_mock.side_effect = fuzzed_responses
-                    gal = stcgal.frontend.StcGal(opts)
-                    self.assertGreaterEqual(gal.run(), 0)
-                    err.reset_mock()
-                    out.reset_mock()
-                    sleep_mock.reset_mock()
-                    serial_mock.reset_mock()
-                    write_mock.reset_mock()
-                    read_mock.reset_mock()
+                opts = get_default_opts()
+                opts.protocol = test_data["protocol"]
+                opts.code_image.read.return_value = bytes(test_data["code_data"])
+                serial_mock.return_value.inWaiting.return_value = 1
+                fuzzed_responses = []
+                for arr in convert_to_bytes(test_data["responses"]):
+                    fuzzed_responses.append(fuzzer.fuzz(arr))
+                read_mock.side_effect = fuzzed_responses
+                gal = stcgal.frontend.StcGal(opts)
+                self.assertGreaterEqual(gal.run(), 0)
+                err.reset_mock()
+                out.reset_mock()
+                sleep_mock.reset_mock()
+                serial_mock.reset_mock()
+                write_mock.reset_mock()
+                read_mock.reset_mock()
